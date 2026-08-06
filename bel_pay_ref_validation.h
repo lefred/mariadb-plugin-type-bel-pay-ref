@@ -26,8 +26,30 @@ static const size_t BASE_LENGTH= 10;
 static const size_t DIGITS_LENGTH= 12;
 static const size_t FORMATTED_LENGTH= 20;
 
+enum Validation_reason
+{
+  VALID,
+  INVALID_LENGTH,
+  INVALID_CHARACTERS,
+  INVALID_SEPARATORS,
+  CHECK_DIGIT_MISMATCH
+};
+
+struct Validation_detail
+{
+  Validation_reason reason;
+  std::string base;
+  std::string expected;
+  std::string received;
+
+  bool valid() const { return reason == VALID; }
+};
+
 /* Validate either canonical +++XXX/YYYY/ZZZZZ+++ or compact notation. */
 bool validate(const char *value, size_t length);
+
+/* Return validation status and check-digit details when digits can be parsed. */
+Validation_detail validate_detail(const char *value, size_t length);
 
 /* Extract 12 digits from either canonical or compact notation. */
 bool extract_digits(const char *value, size_t length, std::string *digits);

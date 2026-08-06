@@ -106,8 +106,61 @@ bool calculate_check_digits(const char *base, size_t length,
 
 bool validate(const char *value, size_t length)
 {
+  return validate_detail(value, length).valid();
+}
+
+Validation_detail validate_detail(const char *value, size_t length)
+{
+  Validation_detail detail;
+  detail.reason= INVALID_LENGTH;
+  if (!value || (length != DIGITS_LENGTH && length != FORMATTED_LENGTH))
+    return detail;
+
   std::string digits;
-  return extract_digits(value, length, &digits) && digits_are_valid(digits);
+  if (length == DIGITS_LENGTH)
+  {
+    if (!all_digits(value, length))
+    {
+      detail.reason= INVALID_CHARACTERS;
+      return detail;
+    }
+    digits.assign(value, length);
+  }
+  else
+  {
+    if (value[0] != '+' || value[1] != '+' || value[2] != '+' ||
+        value[6] != '/' || value[11] != '/' ||
+        value[17] != '+' || value[18] != '+' || value[19] != '+')
+    {
+      detail.reason= INVALID_SEPARATORS;
+      return detail;
+    }
+
+    digits.reserve(DIGITS_LENGTH);
+    for (size_t i= 3; i < 17; ++i)
+    {
+      if (i == 6 || i == 11)
+        continue;
+      if (!std::isdigit(static_cast<unsigned char>(value[i])))
+      {
+        detail.reason= INVALID_CHARACTERS;
+        return detail;
+      }
+      digits.push_back(value[i]);
+    }
+  }
+
+  unsigned int expected;
+  if (!calculate_check_digits(digits.data(), BASE_LENGTH, &expected))
+    return detail;
+
+  detail.base.assign(digits, 0, BASE_LENGTH);
+  detail.expected.push_back(static_cast<char>('0' + expected / 10));
+  detail.expected.push_back(static_cast<char>('0' + expected % 10));
+  detail.received.assign(digits, BASE_LENGTH, 2);
+  detail.reason= detail.expected == detail.received ?
+                   VALID : CHECK_DIGIT_MISMATCH;
+  return detail;
 }
 
 bool format(const char *value, size_t length, std::string *result)

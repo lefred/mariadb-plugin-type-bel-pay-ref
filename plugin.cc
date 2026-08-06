@@ -68,5 +68,9 @@ maria_declare_plugin(type_bel_pay_ref)
   BEL_PAY_REF_PLUGIN_ENTRY(MariaDB_FUNCTION_PLUGIN,
                      &plugin_descriptor_bel_pay_ref_generate_parts,
                      "bel_pay_ref_generate_parts",
-                     "Generate a reference from one or two numeric parts")
+                     "Generate a reference from one or two numeric parts"),
+  BEL_PAY_REF_PLUGIN_ENTRY(MariaDB_FUNCTION_PLUGIN,
+                     &plugin_descriptor_bel_pay_ref_validate_detail,
+                     "bel_pay_ref_validate_detail",
+                     "Return detailed payment reference validation as JSON")
 maria_declare_plugin_end;

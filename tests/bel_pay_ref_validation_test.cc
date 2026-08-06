@@ -55,4 +55,31 @@ int main()
   assert(result == "+++000/0000/04242+++");
   assert(!bel_pay_ref::generate_parts("123456", 6, "12345", 5, &result));
   assert(!bel_pay_ref::generate_parts("12x", 3, "1", 1, &result));
+
+  bel_pay_ref::Validation_detail detail=
+    bel_pay_ref::validate_detail("+++123/4567/89003+++", 20);
+  assert(!detail.valid());
+  assert(detail.reason == bel_pay_ref::CHECK_DIGIT_MISMATCH);
+  assert(detail.base == "1234567890");
+  assert(detail.expected == "02");
+  assert(detail.received == "03");
+
+  detail= bel_pay_ref::validate_detail("123456789002", 12);
+  assert(detail.valid());
+  assert(detail.reason == bel_pay_ref::VALID);
+  assert(detail.expected == "02");
+  assert(detail.received == "02");
+
+  detail= bel_pay_ref::validate_detail("not-a-reference", 15);
+  assert(detail.reason == bel_pay_ref::INVALID_LENGTH);
+  assert(detail.base.empty());
+
+  detail= bel_pay_ref::validate_detail("12345678900x", 12);
+  assert(detail.reason == bel_pay_ref::INVALID_CHARACTERS);
+
+  detail= bel_pay_ref::validate_detail("+++123-4567/89002+++", 20);
+  assert(detail.reason == bel_pay_ref::INVALID_SEPARATORS);
+
+  detail= bel_pay_ref::validate_detail("+++123/456x/89002+++", 20);
+  assert(detail.reason == bel_pay_ref::INVALID_CHARACTERS);
 }

@@ -269,3 +269,76 @@ public:
 static Create_bel_pay_ref_generate_parts create_bel_pay_ref_generate_parts;
 Plugin_function plugin_descriptor_bel_pay_ref_generate_parts(
   &create_bel_pay_ref_generate_parts);
+
+class Item_func_bel_pay_ref_validate_detail : public Item_str_func
+{
+public:
+  Item_func_bel_pay_ref_validate_detail(THD *thd, Item *arg)
+    : Item_str_func(thd, arg) {}
+
+  bool fix_length_and_dec(THD *thd) override
+  {
+    collation.set(args[0]->collation);
+    max_length= 160;
+    set_maybe_null();
+    return false;
+  }
+
+  String *val_str(String *result) override
+  {
+    StringBuffer<64> buffer;
+    String *value= args[0]->val_str(&buffer);
+    if (!value)
+    {
+      null_value= true;
+      return nullptr;
+    }
+
+    const bel_pay_ref::Validation_detail detail=
+      bel_pay_ref::validate_detail(value->ptr(), value->length());
+    std::string json;
+    if (detail.reason != bel_pay_ref::VALID &&
+        detail.reason != bel_pay_ref::CHECK_DIGIT_MISMATCH)
+    {
+      const char *reason= detail.reason == bel_pay_ref::INVALID_LENGTH ?
+                            "INVALID_LENGTH" :
+                         detail.reason == bel_pay_ref::INVALID_CHARACTERS ?
+                            "INVALID_CHARACTERS" : "INVALID_SEPARATORS";
+      json= "{\"valid\":false,\"reason\":\"";
+      json.append(reason);
+      json.append("\"}");
+    }
+    else
+    {
+      const char *reason= detail.valid() ? "VALID" : "CHECK_DIGIT_MISMATCH";
+      json= detail.valid() ? "{\"valid\":true,\"reason\":\"" :
+                             "{\"valid\":false,\"reason\":\"";
+      json.append(reason);
+      json.append("\",\"expected\":\"");
+      json.append(detail.expected);
+      json.append("\",\"received\":\"");
+      json.append(detail.received);
+      json.append("\",\"base\":\"");
+      json.append(detail.base);
+      json.append("\"}");
+    }
+
+    if (result->copy(json.data(), json.size(), value->charset()))
+    {
+      null_value= true;
+      return nullptr;
+    }
+    null_value= false;
+    return result;
+  }
+
+  LEX_CSTRING func_name_cstring() const override
+  { return "bel_pay_ref_validate_detail"_LEX_CSTRING; }
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_bel_pay_ref_validate_detail>(thd, this); }
+};
+
+static Create_bel_pay_ref_func_arg1<Item_func_bel_pay_ref_validate_detail>
+  create_bel_pay_ref_validate_detail;
+Plugin_function plugin_descriptor_bel_pay_ref_validate_detail(
+  &create_bel_pay_ref_validate_detail);

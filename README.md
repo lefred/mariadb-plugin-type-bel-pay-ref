@@ -46,19 +46,20 @@ MariaDB > SHOW WARNINGS;
 MariaDB > INSTALL SONAME 'type_bel_pay_ref';
 MariaDB > SELECT plugin_name, plugin_type, plugin_library, plugin_description, plugin_author 
           FROM information_schema.PLUGINS WHERE plugin_library LIKE 'type_bel_pay_ref.so';
-+----------------------------+-------------+---------------------+----------------------------------------------------+---------------+
-| plugin_name                | plugin_type | plugin_library      | plugin_description                                 | plugin_author |
-+----------------------------+-------------+---------------------+----------------------------------------------------+---------------+
-| bel_pay_ref                | DATA TYPE   | type_bel_pay_ref.so | Belgian structured payment reference data type     | lefred        |
-| bel_pay_ref_is_valid       | FUNCTION    | type_bel_pay_ref.so | Validate a Belgian structured payment reference    | lefred        |
-| bel_pay_ref_base           | FUNCTION    | type_bel_pay_ref.so | Return the 10-digit payment reference base         | lefred        |
-| bel_pay_ref_check_digits   | FUNCTION    | type_bel_pay_ref.so | Return the payment reference check digits          | lefred        |
-| bel_pay_ref_format         | FUNCTION    | type_bel_pay_ref.so | Format a valid 12-digit payment reference          | lefred        |
-| bel_pay_ref_compact        | FUNCTION    | type_bel_pay_ref.so | Return a payment reference as 12 digits            | lefred        |
-| bel_pay_ref_generate       | FUNCTION    | type_bel_pay_ref.so | Generate a reference from a 10-digit base          | lefred        |
-| bel_pay_ref_generate_parts | FUNCTION    | type_bel_pay_ref.so | Generate a reference from one or two numeric parts | lefred        |
-+----------------------------+-------------+---------------------+----------------------------------------------------+---------------+
-8 rows in set (0.009 sec)
++-----------------------------+-------------+---------------------+------------------------------------------------------+---------------+
+| plugin_name                 | plugin_type | plugin_library      | plugin_description                                   | plugin_author |
++-----------------------------+-------------+---------------------+------------------------------------------------------+---------------+
+| bel_pay_ref                 | DATA TYPE   | type_bel_pay_ref.so | Belgian structured payment reference data type       | lefred        |
+| bel_pay_ref_is_valid        | FUNCTION    | type_bel_pay_ref.so | Validate a Belgian structured payment reference      | lefred        |
+| bel_pay_ref_base            | FUNCTION    | type_bel_pay_ref.so | Return the 10-digit payment reference base           | lefred        |
+| bel_pay_ref_check_digits    | FUNCTION    | type_bel_pay_ref.so | Return the payment reference check digits            | lefred        |
+| bel_pay_ref_format          | FUNCTION    | type_bel_pay_ref.so | Format a valid 12-digit payment reference            | lefred        |
+| bel_pay_ref_compact         | FUNCTION    | type_bel_pay_ref.so | Return a payment reference as 12 digits              | lefred        |
+| bel_pay_ref_generate        | FUNCTION    | type_bel_pay_ref.so | Generate a reference from a 10-digit base            | lefred        |
+| bel_pay_ref_generate_parts  | FUNCTION    | type_bel_pay_ref.so | Generate a reference from one or two numeric parts   | lefred        |
+| bel_pay_ref_validate_detail | FUNCTION    | type_bel_pay_ref.so | Return detailed payment reference validation as JSON | lefred        |
++-----------------------------+-------------+---------------------+------------------------------------------------------+---------------+
+9 rows in set (0.002 sec)
 ```
 
 Example in action:
@@ -128,6 +129,9 @@ Query OK, 0 rows affected (0.001 sec)
   an invalid base.
 - `BEL_PAY_REF_GENERATE_PARTS(x[, y])` creates a 10-digit base from one number,
   or from a fixed prefix and a sequence number, before calculating the check
+  digits.
+- `BEL_PAY_REF_VALIDATE_DETAIL(value)` returns a JSON document describing the
+  validation result and, when available, the expected and received check
   digits.
 
 ### `BEL_PAY_REF_IS_VALID()`
@@ -209,6 +213,29 @@ SELECT BEL_PAY_REF_GENERATE_PARTS(123, 42);
 Both arguments must contain digits only. Their combined unpadded length must
 not exceed 10 digits. A fixed prefix therefore stays in the same position as
 the sequence grows; for example, prefix `123` leaves seven sequence digits.
+
+### `BEL_PAY_REF_VALIDATE_DETAIL()`
+
+```sql
+SELECT BEL_PAY_REF_VALIDATE_DETAIL('+++123/4567/89003+++');
+-- {"valid":false,"reason":"CHECK_DIGIT_MISMATCH","expected":"02","received":"03","base":"1234567890"}
+
+SELECT BEL_PAY_REF_VALIDATE_DETAIL('123456789002');
+-- {"valid":true,"reason":"VALID","expected":"02","received":"02","base":"1234567890"}
+
+SELECT BEL_PAY_REF_VALIDATE_DETAIL('invalid');
+-- {"valid":false,"reason":"INVALID_LENGTH"}
+
+SELECT BEL_PAY_REF_VALIDATE_DETAIL('12345678900x');
+-- {"valid":false,"reason":"INVALID_CHARACTERS"}
+
+SELECT BEL_PAY_REF_VALIDATE_DETAIL('+++123-4567/89002+++');
+-- {"valid":false,"reason":"INVALID_SEPARATORS"}
+```
+
+`BEL_PAY_REF_VALIDATE_DETAIL(NULL)` returns SQL `NULL`.
+The possible failure reasons are `INVALID_LENGTH`, `INVALID_CHARACTERS`,
+`INVALID_SEPARATORS`, and `CHECK_DIGIT_MISMATCH`.
 
 Pass bases as strings when leading zeroes matter. The functions that return a
 string return `NULL` when their input is invalid or SQL `NULL`.
