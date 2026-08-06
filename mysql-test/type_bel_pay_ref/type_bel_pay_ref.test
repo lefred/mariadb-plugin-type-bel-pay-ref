@@ -1,0 +1,155 @@
+--echo #
+--echo # type_bel_pay_ref: the BEL_PAY_REF data type and its companion
+--echo # functions.
+--echo #
+
+--echo # Plugin registration (data type + 6 functions).
+SELECT plugin_name, plugin_type, plugin_status, plugin_author
+FROM information_schema.PLUGINS
+WHERE plugin_library LIKE 'type_bel_pay_ref%'
+ORDER BY plugin_type, plugin_name;
+
+--echo #
+--echo # Column storage: canonical form, compact-notation input,
+--echo # strict-mode rejection of invalid values.
+--echo #
+
+CREATE TABLE invoices (
+  id BIGINT UNSIGNED PRIMARY KEY,
+  payment_reference BEL_PAY_REF NOT NULL
+);
+SHOW CREATE TABLE invoices;
+
+INSERT INTO invoices VALUES (1, '+++123/4567/89002+++');
+INSERT INTO invoices VALUES (2, '123456789002');
+SELECT id, payment_reference FROM invoices ORDER BY id;
+
+--error ER_WRONG_VALUE
+INSERT INTO invoices VALUES (3, '+++123/4567/89003+++');
+--error ER_WRONG_VALUE
+INSERT INTO invoices VALUES (3, 'not-a-reference');
+
+DROP TABLE invoices;
+
+--echo #
+--echo # MDEV: BEL_PAY_REF must be directly usable in a UNIQUE/PRIMARY KEY,
+--echo # without an explicit key-length prefix (unlike BLOB/TEXT columns,
+--echo # which reject "KEY (col)" and require "KEY (col(N))").
+--echo #
+
+CREATE TABLE refs (
+  payment_reference BEL_PAY_REF NOT NULL,
+  UNIQUE KEY (payment_reference)
+);
+SHOW CREATE TABLE refs;
+
+INSERT INTO refs VALUES ('123456789002');
+--echo # Same reference, given in canonical form: must collide with the
+--echo # compact-form row above, proving the unique index compares the
+--echo # stored canonical value (and that it works without a key prefix).
+--error ER_DUP_ENTRY
+INSERT INTO refs VALUES ('+++123/4567/89002+++');
+SELECT * FROM refs;
+
+--replace_column 9 #
+EXPLAIN SELECT * FROM refs WHERE payment_reference = '123456789002';
+
+DROP TABLE refs;
+
+--echo #
+--echo # Non-strict SQL mode: an invalid value on a NOT NULL column is
+--echo # reported as a warning and replaced by the type's canonical
+--echo # minimum value, instead of aborting the statement.
+--echo #
+
+CREATE TABLE t1 (payment_reference BEL_PAY_REF NOT NULL);
+SET @old_sql_mode= @@sql_mode;
+SET sql_mode= '';
+INSERT INTO t1 VALUES ('not-a-reference');
+SHOW WARNINGS;
+SELECT * FROM t1;
+SET sql_mode= @old_sql_mode;
+DROP TABLE t1;
+
+--echo #
+--echo # NULL handling.
+--echo #
+
+CREATE TABLE t1 (payment_reference BEL_PAY_REF NULL);
+INSERT INTO t1 VALUES (NULL);
+SELECT * FROM t1;
+DROP TABLE t1;
+
+--echo #
+--echo # BEL_PAY_REF_IS_VALID()
+--echo #
+
+SELECT BEL_PAY_REF_IS_VALID('+++123/4567/89002+++');
+SELECT BEL_PAY_REF_IS_VALID('123456789002');
+SELECT BEL_PAY_REF_IS_VALID('+++123/4567/89003+++');
+SELECT BEL_PAY_REF_IS_VALID('+++000/0000/00097+++');
+SELECT BEL_PAY_REF_IS_VALID('+++000/0000/09797+++');
+SELECT BEL_PAY_REF_IS_VALID('');
+SELECT BEL_PAY_REF_IS_VALID(NULL);
+
+--echo #
+--echo # BEL_PAY_REF_BASE() / BEL_PAY_REF_CHECK_DIGITS()
+--echo #
+
+SELECT BEL_PAY_REF_BASE('+++123/4567/89002+++');
+SELECT BEL_PAY_REF_BASE('123456789002');
+SELECT BEL_PAY_REF_BASE('+++123/4567/89003+++');
+SELECT BEL_PAY_REF_BASE(NULL);
+
+SELECT BEL_PAY_REF_CHECK_DIGITS('+++123/4567/89002+++');
+SELECT BEL_PAY_REF_CHECK_DIGITS('+++000/0000/00097+++');
+SELECT BEL_PAY_REF_CHECK_DIGITS('+++123/4567/89003+++');
+
+--echo #
+--echo # BEL_PAY_REF_FORMAT() / BEL_PAY_REF_COMPACT()
+--echo #
+
+SELECT BEL_PAY_REF_FORMAT('123456789002');
+SELECT BEL_PAY_REF_FORMAT('+++123/4567/89002+++');
+SELECT BEL_PAY_REF_FORMAT('123456789003');
+SELECT BEL_PAY_REF_FORMAT(NULL);
+
+SELECT BEL_PAY_REF_COMPACT('+++123/4567/89002+++');
+SELECT BEL_PAY_REF_COMPACT('123456789002');
+SELECT BEL_PAY_REF_COMPACT('+++123/4567/89003+++');
+
+--echo #
+--echo # BEL_PAY_REF_GENERATE()
+--echo #
+
+SELECT BEL_PAY_REF_GENERATE('1234567890');
+SELECT BEL_PAY_REF_GENERATE('0000000000');
+SELECT BEL_PAY_REF_GENERATE('123456789');
+SELECT BEL_PAY_REF_GENERATE('12345678901');
+SELECT BEL_PAY_REF_GENERATE(NULL);
+
+--echo #
+--echo # CAST(... AS BEL_PAY_REF)
+--echo #
+
+SELECT CAST('123456789002' AS BEL_PAY_REF);
+SELECT CAST('+++123/4567/89002+++' AS BEL_PAY_REF);
+SELECT CAST(NULL AS BEL_PAY_REF);
+
+--error ER_ILLEGAL_PARAMETER_DATA_TYPE_FOR_OPERATION
+SELECT CAST('123456789002' AS BEL_PAY_REF CHARACTER SET binary);
+
+--echo #
+--echo # Multi-byte fixed-width charsets (ucs2/utf16/utf32) cannot carry the
+--echo # plain-ASCII BEL_PAY_REF output as single-byte code units and are
+--echo # rejected, consistently for both CAST and the string functions.
+--echo #
+
+--error ER_NOT_SUPPORTED_YET
+SELECT CAST('123456789002' AS BEL_PAY_REF CHARACTER SET ucs2);
+--error ER_NOT_SUPPORTED_YET
+SELECT BEL_PAY_REF_FORMAT(_ucs2 '123456789002');
+--error ER_NOT_SUPPORTED_YET
+SELECT BEL_PAY_REF_BASE(_ucs2 '123456789002');
+
+--echo # End of tests

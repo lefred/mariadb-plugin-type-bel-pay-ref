@@ -1,0 +1,212 @@
+#
+# type_bel_pay_ref: the BEL_PAY_REF data type and its companion
+# functions.
+#
+# Plugin registration (data type + 6 functions).
+SELECT plugin_name, plugin_type, plugin_status, plugin_author
+FROM information_schema.PLUGINS
+WHERE plugin_library LIKE 'type_bel_pay_ref%'
+ORDER BY plugin_type, plugin_name;
+plugin_name	plugin_type	plugin_status	plugin_author
+bel_pay_ref	DATA TYPE	ACTIVE	lefred
+bel_pay_ref_base	FUNCTION	ACTIVE	lefred
+bel_pay_ref_check_digits	FUNCTION	ACTIVE	lefred
+bel_pay_ref_compact	FUNCTION	ACTIVE	lefred
+bel_pay_ref_format	FUNCTION	ACTIVE	lefred
+bel_pay_ref_generate	FUNCTION	ACTIVE	lefred
+bel_pay_ref_is_valid	FUNCTION	ACTIVE	lefred
+#
+# Column storage: canonical form, compact-notation input,
+# strict-mode rejection of invalid values.
+#
+CREATE TABLE invoices (
+id BIGINT UNSIGNED PRIMARY KEY,
+payment_reference BEL_PAY_REF NOT NULL
+);
+SHOW CREATE TABLE invoices;
+Table	Create Table
+invoices	CREATE TABLE `invoices` (
+  `id` bigint(20) unsigned NOT NULL,
+  `payment_reference` bel_pay_ref NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+INSERT INTO invoices VALUES (1, '+++123/4567/89002+++');
+INSERT INTO invoices VALUES (2, '123456789002');
+SELECT id, payment_reference FROM invoices ORDER BY id;
+id	payment_reference
+1	+++123/4567/89002+++
+2	+++123/4567/89002+++
+INSERT INTO invoices VALUES (3, '+++123/4567/89003+++');
+ERROR HY000: Incorrect BEL_PAY_REF value: '+++123/4567/89003+++'
+INSERT INTO invoices VALUES (3, 'not-a-reference');
+ERROR HY000: Incorrect BEL_PAY_REF value: 'not-a-reference'
+DROP TABLE invoices;
+#
+# MDEV: BEL_PAY_REF must be directly usable in a UNIQUE/PRIMARY KEY,
+# without an explicit key-length prefix (unlike BLOB/TEXT columns,
+# which reject "KEY (col)" and require "KEY (col(N))").
+#
+CREATE TABLE refs (
+payment_reference BEL_PAY_REF NOT NULL,
+UNIQUE KEY (payment_reference)
+);
+SHOW CREATE TABLE refs;
+Table	Create Table
+refs	CREATE TABLE `refs` (
+  `payment_reference` bel_pay_ref NOT NULL,
+  UNIQUE KEY `payment_reference` (`payment_reference`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+INSERT INTO refs VALUES ('123456789002');
+# Same reference, given in canonical form: must collide with the
+# compact-form row above, proving the unique index compares the
+# stored canonical value (and that it works without a key prefix).
+INSERT INTO refs VALUES ('+++123/4567/89002+++');
+ERROR 23000: Duplicate entry '+++123/4567/89002+++' for key 'payment_reference'
+SELECT * FROM refs;
+payment_reference
++++123/4567/89002+++
+EXPLAIN SELECT * FROM refs WHERE payment_reference = '123456789002';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	NULL	NULL	NULL	NULL	NULL	NULL	#	Impossible WHERE noticed after reading const tables
+DROP TABLE refs;
+#
+# Non-strict SQL mode: an invalid value on a NOT NULL column is
+# reported as a warning and replaced by the type's canonical
+# minimum value, instead of aborting the statement.
+#
+CREATE TABLE t1 (payment_reference BEL_PAY_REF NOT NULL);
+SET @old_sql_mode= @@sql_mode;
+SET sql_mode= '';
+INSERT INTO t1 VALUES ('not-a-reference');
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1525	Incorrect BEL_PAY_REF value: 'not-a-reference'
+SELECT * FROM t1;
+payment_reference
+SET sql_mode= @old_sql_mode;
+DROP TABLE t1;
+#
+# NULL handling.
+#
+CREATE TABLE t1 (payment_reference BEL_PAY_REF NULL);
+INSERT INTO t1 VALUES (NULL);
+SELECT * FROM t1;
+payment_reference
+NULL
+DROP TABLE t1;
+#
+# BEL_PAY_REF_IS_VALID()
+#
+SELECT BEL_PAY_REF_IS_VALID('+++123/4567/89002+++');
+BEL_PAY_REF_IS_VALID('+++123/4567/89002+++')
+1
+SELECT BEL_PAY_REF_IS_VALID('123456789002');
+BEL_PAY_REF_IS_VALID('123456789002')
+1
+SELECT BEL_PAY_REF_IS_VALID('+++123/4567/89003+++');
+BEL_PAY_REF_IS_VALID('+++123/4567/89003+++')
+0
+SELECT BEL_PAY_REF_IS_VALID('+++000/0000/00097+++');
+BEL_PAY_REF_IS_VALID('+++000/0000/00097+++')
+1
+SELECT BEL_PAY_REF_IS_VALID('+++000/0000/09797+++');
+BEL_PAY_REF_IS_VALID('+++000/0000/09797+++')
+1
+SELECT BEL_PAY_REF_IS_VALID('');
+BEL_PAY_REF_IS_VALID('')
+0
+SELECT BEL_PAY_REF_IS_VALID(NULL);
+BEL_PAY_REF_IS_VALID(NULL)
+NULL
+#
+# BEL_PAY_REF_BASE() / BEL_PAY_REF_CHECK_DIGITS()
+#
+SELECT BEL_PAY_REF_BASE('+++123/4567/89002+++');
+BEL_PAY_REF_BASE('+++123/4567/89002+++')
+1234567890
+SELECT BEL_PAY_REF_BASE('123456789002');
+BEL_PAY_REF_BASE('123456789002')
+1234567890
+SELECT BEL_PAY_REF_BASE('+++123/4567/89003+++');
+BEL_PAY_REF_BASE('+++123/4567/89003+++')
+NULL
+SELECT BEL_PAY_REF_BASE(NULL);
+BEL_PAY_REF_BASE(NULL)
+NULL
+SELECT BEL_PAY_REF_CHECK_DIGITS('+++123/4567/89002+++');
+BEL_PAY_REF_CHECK_DIGITS('+++123/4567/89002+++')
+02
+SELECT BEL_PAY_REF_CHECK_DIGITS('+++000/0000/00097+++');
+BEL_PAY_REF_CHECK_DIGITS('+++000/0000/00097+++')
+97
+SELECT BEL_PAY_REF_CHECK_DIGITS('+++123/4567/89003+++');
+BEL_PAY_REF_CHECK_DIGITS('+++123/4567/89003+++')
+NULL
+#
+# BEL_PAY_REF_FORMAT() / BEL_PAY_REF_COMPACT()
+#
+SELECT BEL_PAY_REF_FORMAT('123456789002');
+BEL_PAY_REF_FORMAT('123456789002')
++++123/4567/89002+++
+SELECT BEL_PAY_REF_FORMAT('+++123/4567/89002+++');
+BEL_PAY_REF_FORMAT('+++123/4567/89002+++')
++++123/4567/89002+++
+SELECT BEL_PAY_REF_FORMAT('123456789003');
+BEL_PAY_REF_FORMAT('123456789003')
+NULL
+SELECT BEL_PAY_REF_FORMAT(NULL);
+BEL_PAY_REF_FORMAT(NULL)
+NULL
+SELECT BEL_PAY_REF_COMPACT('+++123/4567/89002+++');
+BEL_PAY_REF_COMPACT('+++123/4567/89002+++')
+123456789002
+SELECT BEL_PAY_REF_COMPACT('123456789002');
+BEL_PAY_REF_COMPACT('123456789002')
+123456789002
+SELECT BEL_PAY_REF_COMPACT('+++123/4567/89003+++');
+BEL_PAY_REF_COMPACT('+++123/4567/89003+++')
+NULL
+#
+# BEL_PAY_REF_GENERATE()
+#
+SELECT BEL_PAY_REF_GENERATE('1234567890');
+BEL_PAY_REF_GENERATE('1234567890')
++++123/4567/89002+++
+SELECT BEL_PAY_REF_GENERATE('0000000000');
+BEL_PAY_REF_GENERATE('0000000000')
++++000/0000/00097+++
+SELECT BEL_PAY_REF_GENERATE('123456789');
+BEL_PAY_REF_GENERATE('123456789')
+NULL
+SELECT BEL_PAY_REF_GENERATE('12345678901');
+BEL_PAY_REF_GENERATE('12345678901')
+NULL
+SELECT BEL_PAY_REF_GENERATE(NULL);
+BEL_PAY_REF_GENERATE(NULL)
+NULL
+#
+# CAST(... AS BEL_PAY_REF)
+#
+SELECT CAST('123456789002' AS BEL_PAY_REF);
+CAST('123456789002' AS BEL_PAY_REF)
++++123/4567/89002+++
+SELECT CAST('+++123/4567/89002+++' AS BEL_PAY_REF);
+CAST('+++123/4567/89002+++' AS BEL_PAY_REF)
++++123/4567/89002+++
+SELECT CAST(NULL AS BEL_PAY_REF);
+CAST(NULL AS BEL_PAY_REF)
+NULL
+SELECT CAST('123456789002' AS BEL_PAY_REF CHARACTER SET binary);
+ERROR HY000: Illegal parameter data type bel_pay_ref for operation 'CHARACTER SET binary'
+#
+# Multi-byte fixed-width charsets (ucs2/utf16/utf32) cannot carry the
+# plain-ASCII BEL_PAY_REF output as single-byte code units and are
+# rejected, consistently for both CAST and the string functions.
+#
+SELECT CAST('123456789002' AS BEL_PAY_REF CHARACTER SET ucs2);
+ERROR 42000: This version of MariaDB doesn't yet support 'CAST(AS BEL_PAY_REF CHARACTER SET ucs2/utf16/utf32)'
+SELECT BEL_PAY_REF_FORMAT(_ucs2 '123456789002');
+ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
+SELECT BEL_PAY_REF_BASE(_ucs2 '123456789002');
+ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
+# End of tests
