@@ -143,4 +143,30 @@ bool generate(const char *base, size_t length, std::string *result)
   return true;
 }
 
+bool generate_parts(const char *first, size_t first_length,
+                    const char *second, size_t second_length,
+                    std::string *result)
+{
+  if (!result || !first_length || first_length > BASE_LENGTH ||
+      !all_digits(first, first_length))
+    return false;
+
+  std::string base;
+  if (!second)
+  {
+    base.assign(BASE_LENGTH - first_length, '0');
+    base.append(first, first_length);
+  }
+  else
+  {
+    if (!second_length || first_length + second_length > BASE_LENGTH ||
+        !all_digits(second, second_length))
+      return false;
+    base.assign(first, first_length);
+    base.append(BASE_LENGTH - first_length - second_length, '0');
+    base.append(second, second_length);
+  }
+  return generate(base.data(), base.length(), result);
+}
+
 } // namespace bel_pay_ref

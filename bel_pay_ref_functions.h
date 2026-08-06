@@ -24,5 +24,6 @@ extern Plugin_function plugin_descriptor_bel_pay_ref_check_digits;
 extern Plugin_function plugin_descriptor_bel_pay_ref_format;
 extern Plugin_function plugin_descriptor_bel_pay_ref_compact;
 extern Plugin_function plugin_descriptor_bel_pay_ref_generate;
+extern Plugin_function plugin_descriptor_bel_pay_ref_generate_parts;
 
 #endif

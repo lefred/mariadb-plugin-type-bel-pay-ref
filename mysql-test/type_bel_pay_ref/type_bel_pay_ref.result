@@ -2,7 +2,7 @@
 # type_bel_pay_ref: the BEL_PAY_REF data type and its companion
 # functions.
 #
-# Plugin registration (data type + 6 functions).
+# Plugin registration (data type + 7 functions).
 SELECT plugin_name, plugin_type, plugin_status, plugin_author
 FROM information_schema.PLUGINS
 WHERE plugin_library LIKE 'type_bel_pay_ref%'
@@ -14,6 +14,7 @@ bel_pay_ref_check_digits	FUNCTION	ACTIVE	lefred
 bel_pay_ref_compact	FUNCTION	ACTIVE	lefred
 bel_pay_ref_format	FUNCTION	ACTIVE	lefred
 bel_pay_ref_generate	FUNCTION	ACTIVE	lefred
+bel_pay_ref_generate_parts	FUNCTION	ACTIVE	lefred
 bel_pay_ref_is_valid	FUNCTION	ACTIVE	lefred
 #
 # Column storage: canonical form, compact-notation input,
@@ -185,6 +186,41 @@ SELECT BEL_PAY_REF_GENERATE(NULL);
 BEL_PAY_REF_GENERATE(NULL)
 NULL
 #
+# BEL_PAY_REF_GENERATE_PARTS()
+#
+# One argument: left-padded with zeroes to 10 digits.
+SELECT BEL_PAY_REF_GENERATE_PARTS(42);
+BEL_PAY_REF_GENERATE_PARTS(42)
++++000/0000/04242+++
+SELECT BEL_PAY_REF_GENERATE_PARTS('0000000000');
+BEL_PAY_REF_GENERATE_PARTS('0000000000')
++++000/0000/00097+++
+# Two arguments: fixed prefix, sequence number padded to fill the rest.
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, 1);
+BEL_PAY_REF_GENERATE_PARTS(123, 1)
++++123/0000/00137+++
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, 42);
+BEL_PAY_REF_GENERATE_PARTS(123, 42)
++++123/0000/04278+++
+# Invalid: non-digit input, combined length over 10 digits, NULL.
+SELECT BEL_PAY_REF_GENERATE_PARTS('12x');
+BEL_PAY_REF_GENERATE_PARTS('12x')
+NULL
+SELECT BEL_PAY_REF_GENERATE_PARTS('123456', '12345');
+BEL_PAY_REF_GENERATE_PARTS('123456', '12345')
+NULL
+SELECT BEL_PAY_REF_GENERATE_PARTS(NULL);
+BEL_PAY_REF_GENERATE_PARTS(NULL)
+NULL
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, NULL);
+BEL_PAY_REF_GENERATE_PARTS(123, NULL)
+NULL
+# Wrong argument count.
+SELECT BEL_PAY_REF_GENERATE_PARTS();
+ERROR 42000: Incorrect parameter count in the call to native function 'BEL_PAY_REF_GENERATE_PARTS'
+SELECT BEL_PAY_REF_GENERATE_PARTS(1, 2, 3);
+ERROR 42000: Incorrect parameter count in the call to native function 'BEL_PAY_REF_GENERATE_PARTS'
+#
 # CAST(... AS BEL_PAY_REF)
 #
 SELECT CAST('123456789002' AS BEL_PAY_REF);
@@ -208,5 +244,13 @@ ERROR 42000: This version of MariaDB doesn't yet support 'CAST(AS BEL_PAY_REF CH
 SELECT BEL_PAY_REF_FORMAT(_ucs2 '123456789002');
 ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
 SELECT BEL_PAY_REF_BASE(_ucs2 '123456789002');
+ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
+# BEL_PAY_REF_GENERATE_PARTS() takes the charset of either argument
+# into account, not just the first.
+SELECT BEL_PAY_REF_GENERATE_PARTS(_ucs2 '123');
+ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
+SELECT BEL_PAY_REF_GENERATE_PARTS(_ucs2 '123', '1');
+ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
+SELECT BEL_PAY_REF_GENERATE_PARTS('123', _ucs2 '1');
 ERROR 42000: This version of MariaDB doesn't yet support 'BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32'
 # End of tests

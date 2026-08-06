@@ -143,3 +143,65 @@ security review, followed by a request to fix the indexing issue, add an
   used `--record` to write `type_bel_pay_ref.result` from real output
   rather than hand-authoring it; a subsequent non-`--record` run passes
   cleanly against that recorded baseline.
+
+## 2026-08-06 — Claude Sonnet 5 (claude-sonnet-5)
+
+**Prompted by:** a request to add a new `BEL_PAY_REF_GENERATE_PARTS(x[, y])`
+SQL function (already implemented, uncommitted, when this session started),
+followed by a request to security-review it, then to fix the one gap found
+by that review, then to rebuild the plugin and run the tests.
+
+### Security review
+
+Reviewed `bel_pay_ref_validation.cc::generate_parts()` and
+`Item_func_bel_pay_ref_generate_parts` in `bel_pay_ref_functions.cc` for
+memory-safety and other concretely exploitable issues (buffer
+overflow/underflow, integer overflow, null-pointer dereference reachable
+from SQL input, type confusion). Hand-traced the bounds arithmetic
+(`first_length`/`second_length` are validated against `BASE_LENGTH` before
+every subtraction/concatenation, so the padding length can never underflow
+and the assembled base is always exactly `BASE_LENGTH` bytes) and the
+argument-count/NULL handling in both the `Item_str_func` wrapper and
+`Create_bel_pay_ref_generate_parts::create_native()`. No exploitable
+vulnerability found; the code is consistently bounds-checked. Used a
+sub-agent to independently repeat this trace as a second pass; it reached
+the same conclusion.
+
+10. **Missing multi-byte-charset guard on `BEL_PAY_REF_GENERATE_PARTS()`
+    (consistency/data-integrity gap, not a memory-safety bug — see security
+    review above).** Every other `BEL_PAY_REF_*` string function rejects
+    `ucs2`/`utf16`/`utf32` arguments in `fix_length_and_dec()` (finding 5,
+    above) because the output is always plain ASCII and tagging it with a
+    fixed-width multi-byte charset would mislabel the data. The new
+    `Item_func_bel_pay_ref_generate_parts::fix_length_and_dec()` had been
+    written without that guard. Concretely, `all_digits()` rejects the
+    embedded NUL bytes any multi-byte digit encoding produces, so this
+    could not actually be triggered to emit mislabeled data — but it was
+    still an inconsistency with the rest of the plugin. **Fix:** added the
+    same `mbminlen > 1` check, extended to inspect **both** `args[0]` and
+    (when present) `args[1]` independently, since `GENERATE_PARTS` is the
+    only one of these functions that takes two arguments and either one
+    could carry a multi-byte charset on its own. Affected:
+    `bel_pay_ref_functions.cc`.
+
+### Verification performed
+
+- Rebuilt the plugin (`cmake --build --target type_bel_pay_ref` against the
+  MariaDB Server source tree): clean, no warnings.
+- Compiled the standalone validation core
+  (`bel_pay_ref_validation.cc` + `tests/bel_pay_ref_validation_test.cc`,
+  which already covered `generate_parts()`) with
+  `-Wall -Wextra -Wpedantic`: clean; ran it: all assertions pass.
+- Extended `mysql-test/type_bel_pay_ref/type_bel_pay_ref.test` with
+  dedicated coverage for `BEL_PAY_REF_GENERATE_PARTS()`: one-argument and
+  two-argument (prefix + sequence) success cases matching the `README`
+  examples; invalid input (non-digit, combined length over 10 digits,
+  `NULL` in either position); wrong argument count (0 and 3 args); and
+  multi-byte-charset rejection for each argument independently, including
+  `SELECT BEL_PAY_REF_GENERATE_PARTS('123', _ucs2 '1')` to exercise the
+  new `args[1]` check specifically.
+- Ran that suite via `mysql-test-run.pl` against a live server with the
+  rebuilt plugin loaded, `--record`ed `type_bel_pay_ref.result` from real
+  output (confirming e.g. the `args[1]` charset check actually raises
+  `ER_NOT_SUPPORTED_YET` live, not just at review time), then re-ran
+  without `--record`: passes cleanly against that baseline.

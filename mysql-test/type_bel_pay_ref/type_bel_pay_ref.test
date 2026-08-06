@@ -3,7 +3,7 @@
 --echo # functions.
 --echo #
 
---echo # Plugin registration (data type + 6 functions).
+--echo # Plugin registration (data type + 7 functions).
 SELECT plugin_name, plugin_type, plugin_status, plugin_author
 FROM information_schema.PLUGINS
 WHERE plugin_library LIKE 'type_bel_pay_ref%'
@@ -129,6 +129,30 @@ SELECT BEL_PAY_REF_GENERATE('12345678901');
 SELECT BEL_PAY_REF_GENERATE(NULL);
 
 --echo #
+--echo # BEL_PAY_REF_GENERATE_PARTS()
+--echo #
+
+--echo # One argument: left-padded with zeroes to 10 digits.
+SELECT BEL_PAY_REF_GENERATE_PARTS(42);
+SELECT BEL_PAY_REF_GENERATE_PARTS('0000000000');
+
+--echo # Two arguments: fixed prefix, sequence number padded to fill the rest.
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, 1);
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, 42);
+
+--echo # Invalid: non-digit input, combined length over 10 digits, NULL.
+SELECT BEL_PAY_REF_GENERATE_PARTS('12x');
+SELECT BEL_PAY_REF_GENERATE_PARTS('123456', '12345');
+SELECT BEL_PAY_REF_GENERATE_PARTS(NULL);
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, NULL);
+
+--echo # Wrong argument count.
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+SELECT BEL_PAY_REF_GENERATE_PARTS();
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+SELECT BEL_PAY_REF_GENERATE_PARTS(1, 2, 3);
+
+--echo #
 --echo # CAST(... AS BEL_PAY_REF)
 --echo #
 
@@ -151,5 +175,14 @@ SELECT CAST('123456789002' AS BEL_PAY_REF CHARACTER SET ucs2);
 SELECT BEL_PAY_REF_FORMAT(_ucs2 '123456789002');
 --error ER_NOT_SUPPORTED_YET
 SELECT BEL_PAY_REF_BASE(_ucs2 '123456789002');
+
+--echo # BEL_PAY_REF_GENERATE_PARTS() takes the charset of either argument
+--echo # into account, not just the first.
+--error ER_NOT_SUPPORTED_YET
+SELECT BEL_PAY_REF_GENERATE_PARTS(_ucs2 '123');
+--error ER_NOT_SUPPORTED_YET
+SELECT BEL_PAY_REF_GENERATE_PARTS(_ucs2 '123', '1');
+--error ER_NOT_SUPPORTED_YET
+SELECT BEL_PAY_REF_GENERATE_PARTS('123', _ucs2 '1');
 
 --echo # End of tests

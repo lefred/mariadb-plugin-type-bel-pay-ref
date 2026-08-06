@@ -48,4 +48,11 @@ int main()
   assert(result == "123456789002");
   assert(bel_pay_ref::compact("123456789002", 12, &result));
   assert(result == "123456789002");
+
+  assert(bel_pay_ref::generate_parts("123", 3, "1", 1, &result));
+  assert(result == "+++123/0000/00137+++");
+  assert(bel_pay_ref::generate_parts("42", 2, nullptr, 0, &result));
+  assert(result == "+++000/0000/04242+++");
+  assert(!bel_pay_ref::generate_parts("123456", 6, "12345", 5, &result));
+  assert(!bel_pay_ref::generate_parts("12x", 3, "1", 1, &result));
 }

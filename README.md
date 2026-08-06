@@ -46,18 +46,19 @@ MariaDB > SHOW WARNINGS;
 MariaDB > INSTALL SONAME 'type_bel_pay_ref';
 MariaDB > SELECT plugin_name, plugin_type, plugin_library, plugin_description, plugin_author 
           FROM information_schema.PLUGINS WHERE plugin_library LIKE 'type_bel_pay_ref.so';
-+--------------------------+-------------+---------------------+-------------------------------------------------+---------------+
-| plugin_name              | plugin_type | plugin_library      | plugin_description                              | plugin_author |
-+--------------------------+-------------+---------------------+-------------------------------------------------+---------------+
-| bel_pay_ref              | DATA TYPE   | type_bel_pay_ref.so | Belgian structured payment reference data type  | lefred        |
-| bel_pay_ref_is_valid     | FUNCTION    | type_bel_pay_ref.so | Validate a Belgian structured payment reference | lefred        |
-| bel_pay_ref_base         | FUNCTION    | type_bel_pay_ref.so | Return the 10-digit payment reference base      | lefred        |
-| bel_pay_ref_check_digits | FUNCTION    | type_bel_pay_ref.so | Return the payment reference check digits       | lefred        |
-| bel_pay_ref_format       | FUNCTION    | type_bel_pay_ref.so | Format a valid 12-digit payment reference       | lefred        |
-| bel_pay_ref_compact      | FUNCTION    | type_bel_pay_ref.so | Return a payment reference as 12 digits         | lefred        |
-| bel_pay_ref_generate     | FUNCTION    | type_bel_pay_ref.so | Generate a reference from a 10-digit base       | lefred        |
-+--------------------------+-------------+---------------------+-------------------------------------------------+---------------+
-7 rows in set (0.009 sec)
++----------------------------+-------------+---------------------+----------------------------------------------------+---------------+
+| plugin_name                | plugin_type | plugin_library      | plugin_description                                 | plugin_author |
++----------------------------+-------------+---------------------+----------------------------------------------------+---------------+
+| bel_pay_ref                | DATA TYPE   | type_bel_pay_ref.so | Belgian structured payment reference data type     | lefred        |
+| bel_pay_ref_is_valid       | FUNCTION    | type_bel_pay_ref.so | Validate a Belgian structured payment reference    | lefred        |
+| bel_pay_ref_base           | FUNCTION    | type_bel_pay_ref.so | Return the 10-digit payment reference base         | lefred        |
+| bel_pay_ref_check_digits   | FUNCTION    | type_bel_pay_ref.so | Return the payment reference check digits          | lefred        |
+| bel_pay_ref_format         | FUNCTION    | type_bel_pay_ref.so | Format a valid 12-digit payment reference          | lefred        |
+| bel_pay_ref_compact        | FUNCTION    | type_bel_pay_ref.so | Return a payment reference as 12 digits            | lefred        |
+| bel_pay_ref_generate       | FUNCTION    | type_bel_pay_ref.so | Generate a reference from a 10-digit base          | lefred        |
+| bel_pay_ref_generate_parts | FUNCTION    | type_bel_pay_ref.so | Generate a reference from one or two numeric parts | lefred        |
++----------------------------+-------------+---------------------+----------------------------------------------------+---------------+
+8 rows in set (0.009 sec)
 ```
 
 Example in action:
@@ -125,6 +126,9 @@ Query OK, 0 rows affected (0.001 sec)
 - `BEL_PAY_REF_GENERATE(base)` calculates the check digits for an exactly
   10-digit string and returns the canonical reference; it returns `NULL` for
   an invalid base.
+- `BEL_PAY_REF_GENERATE_PARTS(x[, y])` creates a 10-digit base from one number,
+  or from a fixed prefix and a sequence number, before calculating the check
+  digits.
 
 ### `BEL_PAY_REF_IS_VALID()`
 
@@ -179,6 +183,32 @@ SELECT BEL_PAY_REF_GENERATE('1234567890');
 SELECT BEL_PAY_REF_GENERATE('0000000000');
 -- +++000/0000/00097+++
 ```
+
+### `BEL_PAY_REF_GENERATE_PARTS()`
+
+With one argument, the number is left-padded with zeroes to 10 digits:
+
+```sql
+SELECT BEL_PAY_REF_GENERATE_PARTS(42);
+-- +++000/0000/04242+++
+```
+
+With two arguments, the first is a fixed prefix. The sequence number is
+left-padded with zeroes to fill the remaining positions:
+
+```sql
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, 1);
+-- base: 1230000001
+-- result: +++123/0000/00137+++
+
+SELECT BEL_PAY_REF_GENERATE_PARTS(123, 42);
+-- base: 1230000042
+-- result: +++123/0000/04278+++
+```
+
+Both arguments must contain digits only. Their combined unpadded length must
+not exceed 10 digits. A fixed prefix therefore stays in the same position as
+the sequence grows; for example, prefix `123` leaves seven sequence digits.
 
 Pass bases as strings when leading zeroes matter. The functions that return a
 string return `NULL` when their input is invalid or SQL `NULL`.

@@ -179,3 +179,93 @@ Plugin_function plugin_descriptor_bel_pay_ref_compact(
   &create_bel_pay_ref_compact);
 Plugin_function plugin_descriptor_bel_pay_ref_generate(
   &create_bel_pay_ref_generate);
+
+class Item_func_bel_pay_ref_generate_parts : public Item_str_func
+{
+public:
+  Item_func_bel_pay_ref_generate_parts(THD *thd, Item *arg)
+    : Item_str_func(thd, arg) {}
+  Item_func_bel_pay_ref_generate_parts(THD *thd, Item *first, Item *second)
+    : Item_str_func(thd, first, second) {}
+
+  bool fix_length_and_dec(THD *thd) override
+  {
+    collation.set(args[0]->collation);
+    max_length= bel_pay_ref::FORMATTED_LENGTH;
+    set_maybe_null();
+
+    /*
+      Same rationale as Item_func_bel_pay_ref_string::fix_length_and_dec:
+      the result is always plain ASCII, so mislabeling it with a
+      fixed-width multi-byte charset such as ucs2/utf16/utf32 (via
+      first->charset() below) would produce corrupt data. Reject it
+      up front, consistent with the other BEL_PAY_REF functions. Check
+      both arguments: with two arguments, either one could carry such a
+      charset independently of the other.
+    */
+    if (args[0]->collation.collation->mbminlen > 1 ||
+        (arg_count == 2 && args[1]->collation.collation->mbminlen > 1))
+    {
+      my_error(ER_NOT_SUPPORTED_YET, MYF(0),
+               "BEL_PAY_REF functions with CHARACTER SET ucs2/utf16/utf32");
+      return true;
+    }
+    return false;
+  }
+
+  String *val_str(String *result) override
+  {
+    StringBuffer<64> first_buffer;
+    StringBuffer<64> second_buffer;
+    String *first= args[0]->val_str(&first_buffer);
+    String *second= arg_count == 2 ? args[1]->val_str(&second_buffer) : nullptr;
+    if (!first || (arg_count == 2 && !second))
+    {
+      null_value= true;
+      return nullptr;
+    }
+
+    std::string output;
+    if (!bel_pay_ref::generate_parts(first->ptr(), first->length(),
+                                     second ? second->ptr() : nullptr,
+                                     second ? second->length() : 0, &output) ||
+        result->copy(output.data(), output.size(), first->charset()))
+    {
+      null_value= true;
+      return nullptr;
+    }
+    null_value= false;
+    return result;
+  }
+
+  LEX_CSTRING func_name_cstring() const override
+  { return "bel_pay_ref_generate_parts"_LEX_CSTRING; }
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_bel_pay_ref_generate_parts>(thd, this); }
+};
+
+class Create_bel_pay_ref_generate_parts : public Create_native_func
+{
+public:
+  Item *create_native(THD *thd, const LEX_CSTRING *name,
+                      List<Item> *item_list) override
+  {
+    const uint count= item_list ? item_list->elements : 0;
+    if (count == 1)
+      return new (thd->mem_root)
+        Item_func_bel_pay_ref_generate_parts(thd, item_list->pop());
+    if (count == 2)
+    {
+      Item *first= item_list->pop();
+      Item *second= item_list->pop();
+      return new (thd->mem_root)
+        Item_func_bel_pay_ref_generate_parts(thd, first, second);
+    }
+    my_error(ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT, MYF(0), name->str);
+    return nullptr;
+  }
+};
+
+static Create_bel_pay_ref_generate_parts create_bel_pay_ref_generate_parts;
+Plugin_function plugin_descriptor_bel_pay_ref_generate_parts(
+  &create_bel_pay_ref_generate_parts);

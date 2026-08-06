@@ -45,6 +45,11 @@ bool compact(const char *value, size_t length, std::string *result);
 /* Produce a canonical reference and calculate its check digits. */
 bool generate(const char *base, size_t length, std::string *result);
 
+/* Generate from a number, or from a fixed prefix and a padded sequence. */
+bool generate_parts(const char *first, size_t first_length,
+                    const char *second, size_t second_length,
+                    std::string *result);
+
 } // namespace bel_pay_ref
 
 #endif

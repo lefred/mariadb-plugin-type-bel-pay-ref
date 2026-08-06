@@ -64,5 +64,9 @@ maria_declare_plugin(type_bel_pay_ref)
   BEL_PAY_REF_PLUGIN_ENTRY(MariaDB_FUNCTION_PLUGIN,
                      &plugin_descriptor_bel_pay_ref_generate,
                      "bel_pay_ref_generate",
-                     "Generate a reference from a 10-digit base")
+                     "Generate a reference from a 10-digit base"),
+  BEL_PAY_REF_PLUGIN_ENTRY(MariaDB_FUNCTION_PLUGIN,
+                     &plugin_descriptor_bel_pay_ref_generate_parts,
+                     "bel_pay_ref_generate_parts",
+                     "Generate a reference from one or two numeric parts")
 maria_declare_plugin_end;
