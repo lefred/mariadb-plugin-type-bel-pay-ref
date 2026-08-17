@@ -16,6 +16,7 @@ bel_pay_ref_format	FUNCTION	ACTIVE	lefred
 bel_pay_ref_generate	FUNCTION	ACTIVE	lefred
 bel_pay_ref_generate_parts	FUNCTION	ACTIVE	lefred
 bel_pay_ref_is_valid	FUNCTION	ACTIVE	lefred
+bel_pay_ref_validate_detail	FUNCTION	ACTIVE	lefred
 #
 # Column storage: canonical form, compact-notation input,
 # strict-mode rejection of invalid values.
